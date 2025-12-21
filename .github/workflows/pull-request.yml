@@ -1,0 +1,46 @@
+#
+# Reusable workflow which verifies the PR conforms to project conventions.
+#
+# Permissions required:
+#   pull-requests: read
+#
+name: Pull Request
+
+on:
+  workflow_call
+
+jobs:
+  main:
+    name: Check Pull Request Title (semantic)
+    # See `docs/common/maintenance.md#pull-requests`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Semantic PR type MUST correspond to a commit type defined in
+          # `docs/common/maintenance.md#commit-types`.
+          types: |
+            build
+            bump
+            chore
+            ci
+            docs
+            feat
+            fix
+            perf
+            refactor
+            revert
+            style
+            test
+          # Semantic PR scope MUST correspond to a commit scope defined in
+          # `docs/common/maintenance.md#commit-scopes`.
+          scopes: |
+            base
+            build
+            deps
+            deps-dev
+            parent
+            super
+            util
