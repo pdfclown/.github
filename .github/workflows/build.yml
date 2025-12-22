@@ -9,7 +9,13 @@
 name: Build
 
 on:
-  workflow_call
+  workflow_call:
+    inputs:
+      java_matrix:
+        description: 'Array of Java versions'
+        type: string
+        default: "[ '17', '21', '25' ]"
+        required: false
 
 jobs:
   build:
@@ -17,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        java: [ '17', '21', '25' ]
+        java: ${{ fromJson(inputs.java_matrix) }}
       fail-fast: false
     env:
       JAVA_DISTRO: 'temurin'
