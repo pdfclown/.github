@@ -80,12 +80,12 @@ jobs:
         run: |
           echo "build_deps_local=$([ -d pdfclown-common-build ] && echo true || echo false)" >> $GITHUB_OUTPUT
 
-      - name: Install local dependencies
-        # NOTE: The release executor requires pdfclown-common-build; if such dependency is local, it
-        #       has to be explicitly installed before executing the release (it cannot be included
-        #       in the automated release process because of circular reference issues).
+      - name: Install local pdfclown-common dependencies
+        # NOTE: The release executor requires pdfclown-common-*; if such dependencies are local,
+        #       they have to be explicitly installed before executing the release (they cannot be
+        #       included in the automated release process because of cyclic reference issues).
         if: steps.check_state.outputs.build_deps_local == 'true'
-        run: ./mvnw install --batch-mode --errors -pl pdfclown-common-build -am -Pfast+
+        run: ./mvnw install --batch-mode --errors -Pfast+
 
       - name: Configure SCM
         run: |
@@ -111,5 +111,4 @@ jobs:
               --repo="$GITHUB_REPOSITORY" \
               --title="${{ inputs.repo_title }} $RELEASE_VERSION" \
               --generate-notes \
-              --fail-on-no-commits \
               --draft
