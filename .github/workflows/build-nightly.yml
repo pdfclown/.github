@@ -12,7 +12,13 @@
 name: Nightly Build
 
 on:
-  workflow_call
+  workflow_call:
+    inputs:
+      java_version:
+        description: 'Java version'
+        type: string
+        default: '17'
+        required: false
 
 jobs:
   initialize:
@@ -37,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JAVA_DISTRO: 'temurin'
-      JAVA_VERSION: '17'
+      JAVA_VERSION: ${{ inputs.java_version }}
 
     steps:
       - name: Checkout

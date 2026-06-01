@@ -27,6 +27,11 @@ on:
         description: 'Repository name (e.g., pdfClown Common)'
         type: string
         required: true
+      java_version:
+        description: 'Java version'
+        type: string
+        default: '17'
+        required: false
 
 env:
   COMMITIZEN_VERSION: '4.10.0'
@@ -39,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JAVA_DISTRO: 'temurin'
-      JAVA_VERSION: '17'
+      JAVA_VERSION: ${{ inputs.java_version }}
 
     steps:
       - name: Checkout (full history)
