@@ -28,9 +28,46 @@ jobs:
     env:
       JAVA_DISTRO: 'temurin'
 
+    #
+    # NOTE
+    #
+    # The build is based on two JDKs:
+    #   - tool JDK: from `.tool-versions` file
+    #   - build JDK: from java matrix
+    # Those JDKs are applied to three toolchain levels:
+    #   1. Maven execution (default JDK): tool JDK
+    #   2. Java compiler (`jdk.version` system property): tool JDK, unless build JDK is greater
+    #   3. Java source code (`java.version` system property): build JDK
+    # Rationale: tool JDK represents the minimum requirement to run the toolchain on any environment
+    # (development or CI), so it is applied unless the source code requires a newer version.
+    #
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Resolve tool JDK version
+        id: get-tool-versions
+        uses: paulo-ferraz-oliveira/parse-tool-versions@534819f70c0c04d788b49dafc29c8117901277bd # v1.0.3
+        # NOTE: Explicit commit reference to ensure implementation from unmonitored repo doesn't
+        # change unexpectedly.
+
+      - name: Resolve Java compiler version
+        id: get-jdk-version
+        env:
+          TOOL_JDK: ${{ steps.get-tool-versions.outputs.java }}
+          BUILD_JDK: ${{ matrix.java }}
+          # NOTE: It's a good habit to assign GitHub Actions expressions to env variables instead of
+          # applying them directly into `run:` scripts (injection hazard!), even in case they are
+          # inherently safe, just to be consistent and simplify review and maintenance.
+        run: |
+          if printf '%s\n' "$TOOL_JDK" "$BUILD_JDK" | sort -V -C; then
+            jdk=$BUILD_JDK
+          else
+            jdk=$TOOL_JDK
+          fi
+          echo "jdk_version=$jdk" >> "$GITHUB_OUTPUT"
+          echo "Resolved Java compiler version: $jdk" >&2
 
       - name: Set up build JDK
         uses: actions/setup-java@v5
@@ -42,11 +79,16 @@ jobs:
       - name: Set up tool JDK
         uses: actions/setup-java@v5
         with:
-          java-version-file: '.tool-versions'
+          java-version: ${{ steps.get-tool-versions.outputs.java }}
           distribution: ${{ env.JAVA_DISTRO }}
+        # IMPORTANT: Tool JDK MUST be the last to set up in order to make it the default one and run
+        # Maven.
 
       - name: Build with Maven
-        run: ./mvnw verify --batch-mode --errors -Djava.version=${{ matrix.java }}
+        env:
+          JAVA_VERSION: ${{ matrix.java }}
+          JDK_VERSION: ${{ steps.get-jdk-version.outputs.jdk_version }}
+        run: ./mvnw verify --batch-mode --errors -Djava.version=$JAVA_VERSION -Djdk.version=$JDK_VERSION
 
   submit-dependency-snapshot:
     name: Submit Dependency Snapshot
