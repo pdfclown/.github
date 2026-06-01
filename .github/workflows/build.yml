@@ -67,7 +67,9 @@ jobs:
             jdk=$TOOL_JDK
           fi
           echo "jdk_version=$jdk" >> "$GITHUB_OUTPUT"
-          echo "Resolved Java compiler version: $jdk" >&2
+          echo "Tool-JDK version: $TOOL_JDK" >&2
+          echo "Build-JDK version: $BUILD_JDK" >&2
+          echo "Java compiler version: $jdk" >&2
 
       - name: Set up build JDK
         uses: actions/setup-java@v5
