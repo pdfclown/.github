@@ -16,7 +16,13 @@
 name: Nightly Build
 
 on:
-  workflow_call
+  workflow_call:
+    inputs:
+      force:
+        description: 'Whether to force the build (useful to retry a failed run)'
+        type: boolean
+        default: false
+        required: false
 
 jobs:
   initialize:
@@ -39,7 +45,7 @@ jobs:
   publish:
     name: Publish snapshot
     needs: initialize
-    if: github.sha != needs.initialize.outputs.last_built_sha
+    if: ${{ inputs.force || github.sha != needs.initialize.outputs.last_built_sha }}
     runs-on: ubuntu-latest
 
     #
