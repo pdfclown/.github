@@ -1,8 +1,8 @@
 #
-# Reusable workflow which publishes the provided release version to Maven Central repository.
+# Reusable workflow which publishes a release version to Maven Central repository.
 #
 # Permissions required:
-#   contents: write
+# - contents: write
 #
 # Maintainers' post-activities:
 # 1. the RELEASE COMPONENTS are uploaded to Maven Central for validation: verify and publish them.
@@ -15,36 +15,52 @@ name: Release
 on:
   workflow_call:
     inputs:
+      repo_title:
+        description: 'Repository name (e.g., pdfClown Common)'
+        type: string
+        required: true
       revision:
-        description: 'Version to release (semver2)'
+        description: '(SemVer2) Version to release'
         type: string
         required: true
       scm_startpoint:
         description: 'Release branch start point (by default, main HEAD)'
         type: string
         required: false
-      repo_title:
-        description: 'Repository name (e.g., pdfClown Common)'
-        type: string
-        required: true
-      java_version:
-        description: 'Java version'
-        type: string
-        default: '17'
-        required: false
-
-env:
-  COMMITIZEN_VERSION: '4.10.0'
-  RELEASE_TAG: v${{ inputs.revision }}
-  RELEASE_VERSION: ${{ inputs.revision }}
 
 jobs:
   release:
     name: Publish release
     runs-on: ubuntu-latest
     env:
-      JAVA_DISTRO: 'temurin'
-      JAVA_VERSION: ${{ inputs.java_version }}
+      COMMITIZEN_VERSION: '4.10.0'
+      RELEASE_TAG: v${{ inputs.revision }}
+      RELEASE_VERSION: ${{ inputs.revision }}
+
+    #
+    # NOTE
+    #
+    # The build is based on two JDKs:
+    #   - Tool JDK: from `.tool-versions` file
+    #   - Target JDK: from Maven POM
+    # Those JDKs are applied to three levels:
+    #   1. Maven execution: Tool JDK
+    #   2. Java compiler: Tool JDK (`build.jdk` system property is expected to be set the same as in
+    #      `.tool-versions` file)
+    #   3. Java source code: Target JDK
+    #
+    # |----------------------------------------------------------------------------------------------|
+    # |                       |           JDK             |                       |                  |
+    # |         Level         |---------------------------|    System property    |  MANIFEST entry  |
+    # |                       |  Tool JDK  |  Target JDK  |                       |                  |
+    # |----------------------------------------------------------------------------------------------|
+    # |  1. Maven execution   |      X     |              |  (none: default JDK)  |  Tool-Jdk-Spec   |
+    # |----------------------------------------------------------------------------------------------|
+    # |  2. Java compiler     |      X     |              |  (none: default JDK)  |  Build-Jdk-Spec  |
+    # |----------------------------------------------------------------------------------------------|
+    # |  3. Java source code  |            |       X      |  target.jdk           |  Java-Version    |
+    # |----------------------------------------------------------------------------------------------|
+    #
 
     steps:
       - name: Checkout (full history)
@@ -62,35 +78,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install "commitizen==${{ env.COMMITIZEN_VERSION }}"
 
-      - name: Set up build JDK
-        uses: actions/setup-java@v5
+      - name: Set up Java
+        uses: ./.github/actions/setup-java-publish
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: ${{ env.JAVA_DISTRO }}
-          cache: maven
+          gpg_signing_key: ${{ secrets.GPG_SIGNING_KEY }}
 
-      - name: Set up tool JDK
-        uses: actions/setup-java@v5
-        with:
-          java-version-file: '.tool-versions'
-          distribution: ${{ env.JAVA_DISTRO }}
-          server-id: central
-          server-username: MAVEN_USERNAME
-          server-password: MAVEN_PASSWORD
-          gpg-private-key: ${{ secrets.GPG_SIGNING_KEY }}
-          gpg-passphrase: MAVEN_GPG_PASSPHRASE
-
-      - name: Check state
-        id: check_state
+      - name: Install local Java dependencies (pdfclown-common)
         run: |
-          echo "build_deps_local=$([ -d pdfclown-common-build ] && echo true || echo false)" >> $GITHUB_OUTPUT
-
-      - name: Install local pdfclown-common dependencies
-        # NOTE: The release executor requires pdfclown-common-*; if such dependencies are local,
-        #       they have to be explicitly installed before executing the release (they cannot be
-        #       included in the automated release process because of cyclic reference issues).
-        if: steps.check_state.outputs.build_deps_local == 'true'
-        run: ./mvnw install --batch-mode --errors -Pfast+
+          # NOTE: The release executor requires pdfclown-common-*; if such dependencies are local,
+          #       they have to be explicitly installed before executing the release (they cannot be
+          #       included in the automated release process because of cyclic reference issues).
+          if [ -d pdfclown-common-build ]; then
+            ./mvnw install -Pfast+ -DskipLint --batch-mode --errors
+          fi
 
       - name: Configure SCM
         run: |
@@ -103,9 +103,17 @@ jobs:
           MAVEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_SIGNING_KEY_PASSPHRASE }}
         run: |
-          ./mvnw initialize --batch-mode --errors -N -Prelease \
+          echo "TARGET_JDK: $TARGET_JDK" >&2
+          echo "TARGET_JDK_HOME: $TARGET_JDK_HOME" >&2
+
+          # NOTE:
+          # - no need to set `target.jdk` property, as project's default corresponds to Target JDK
+          # - no need to set `build.jdk` property, as project's default corresponds to Tool JDK
+          ./mvnw initialize -Prelease \
               -Drelease.version=$RELEASE_VERSION \
-              -Drelease.startpoint=${{ inputs.scm_startpoint }}
+              -Drelease.startpoint=${{ inputs.scm_startpoint }} \
+              -Dtarget.jdk.home="$TARGET_JDK_HOME" \
+              -N --batch-mode --errors
 
       - name: Create GitHub Release (draft)
         # NOTE: Generated notes are configured via `.github/release.yml`.

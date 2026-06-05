@@ -1,10 +1,11 @@
 #
-# Reusable workflow which verifies the project builds successfully on JDK 17, 21, 25.
+# Reusable workflow which verifies the project builds successfully on multiple Java versions.
+#
 # On success, its Dependency Snapshot is submitted.
 #
 # Permissions required:
-#   contents: write
-#   security-events: write
+# - contents: write
+# - security-events: write
 #
 name: Build
 
@@ -12,7 +13,7 @@ on:
   workflow_call:
     inputs:
       java_matrix:
-        description: 'Array of Java versions'
+        description: '(JSON array) Java versions'
         type: string
         default: "[ '17', '21', '25' ]"
         required: false
@@ -32,65 +33,106 @@ jobs:
     # NOTE
     #
     # The build is based on two JDKs:
-    #   - tool JDK: from `.tool-versions` file
-    #   - build JDK: from java matrix
-    # Those JDKs are applied to three toolchain levels:
-    #   1. Maven execution (default JDK): tool JDK
-    #   2. Java compiler (`jdk.version` system property): tool JDK, unless build JDK is greater
-    #   3. Java source code (`java.version` system property): build JDK
-    # Rationale: tool JDK represents the minimum requirement to run the toolchain on any environment
-    # (development or CI), so it is applied unless the source code requires a newer version.
+    #   - Tool JDK: from `.tool-versions` file
+    #   - Target JDK: from java matrix
+    # Those JDKs are applied to three levels:
+    #   1. Maven execution: Tool JDK
+    #   2. Java compiler: Tool JDK, unless Target JDK is newer (Tool JDK represents the minimum
+    #      requirement to run the toolchain on any environment (development or CI), so it is applied
+    #      unless the source code requires a newer version)
+    #   3. Java source code: Target JDK
+    #
+    # |----------------------------------------------------------------------------------------------|
+    # |                       |           JDK             |                       |                  |
+    # |         Level         |---------------------------|    System property    |  MANIFEST entry  |
+    # |                       |  Tool JDK  |  Target JDK  |                       |                  |
+    # |----------------------------------------------------------------------------------------------|
+    # |  1. Maven execution   |      X     |              |  (none: default JDK)  |  Tool-Jdk-Spec   |
+    # |----------------------------------------------------------------------------------------------|
+    # |  2. Java compiler     |        (newer one)        |  build.jdk            |  Build-Jdk-Spec  |
+    # |----------------------------------------------------------------------------------------------|
+    # |  3. Java source code  |            |       X      |  target.jdk           |  Java-Version    |
+    # |----------------------------------------------------------------------------------------------|
     #
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Resolve tool JDK version
-        id: get-tool-versions
-        uses: paulo-ferraz-oliveira/parse-tool-versions@534819f70c0c04d788b49dafc29c8117901277bd # v1.0.3
-        # NOTE: Explicit commit reference to ensure implementation from unmonitored repo doesn't
-        # change unexpectedly.
+      - name: Resolve Tool JDK
+        id: tool-versions
+        uses: marocchino/tool-versions-action@4219f2e6bfdb4cce482b78f71ad9663e64f4d247 # v2.0.0
 
-      - name: Resolve Java compiler version
-        id: get-jdk-version
-        env:
-          TOOL_JDK: ${{ steps.get-tool-versions.outputs.java }}
-          BUILD_JDK: ${{ matrix.java }}
-          # NOTE: It's a good habit to assign GitHub Actions expressions to env variables instead of
-          # applying them directly into `run:` scripts (injection hazard!), even in case they are
-          # inherently safe, just to be consistent and simplify review and maintenance.
-        run: |
-          if printf '%s\n' "$TOOL_JDK" "$BUILD_JDK" | sort -V -C; then
-            jdk=$BUILD_JDK
-          else
-            jdk=$TOOL_JDK
-          fi
-          echo "jdk_version=$jdk" >> "$GITHUB_OUTPUT"
-          echo "Tool-JDK version: $TOOL_JDK" >&2
-          echo "Build-JDK version: $BUILD_JDK" >&2
-          echo "Java compiler version: $jdk" >&2
-
-      - name: Set up build JDK
+      - name: Set up Target JDK
         uses: actions/setup-java@v5
         with:
           java-version: ${{ matrix.java }}
           distribution: ${{ env.JAVA_DISTRO }}
           cache: maven
 
-      - name: Set up tool JDK
+      - name: Set up Tool JDK
+        # IMPORTANT: Tool JDK MUST be the last to set up in order to make it the default one and run
+        #            Maven.
         uses: actions/setup-java@v5
         with:
-          java-version: ${{ steps.get-tool-versions.outputs.java }}
+          java-version: ${{ steps.tool-versions.outputs.java }}
           distribution: ${{ env.JAVA_DISTRO }}
-        # IMPORTANT: Tool JDK MUST be the last to set up in order to make it the default one and run
-        # Maven.
+
+      - name: Set up Java environment variables
+        env:
+          TARGET_JDK: ${{ matrix.java }}
+          TOOL_JDK: ${{ steps.tool-versions.outputs.java }}
+        run: |
+          # Export BUILD_JDK!
+          if printf '%s\n' "$TOOL_JDK" "$TARGET_JDK" | sort -V -C; then
+            readonly build_jdk=$TARGET_JDK
+          else
+            readonly build_jdk=$TOOL_JDK
+          fi
+          echo "BUILD_JDK=$build_jdk" >> $GITHUB_ENV
+
+          # Export TARGET_JDK!
+          echo "TARGET_JDK=$TARGET_JDK" >> $GITHUB_ENV
+
+          # Export TARGET_JDK_HOME!
+          readonly target_major=$(echo "$TARGET_JDK" | cut -d'.' -f1)
+          readonly target_jdk_home_varname="JAVA_HOME_${target_major}_${{ runner.arch }}"
+          readonly target_jdk_home="${!target_jdk_home_varname}"
+          if [ -z "$target_jdk_home" ]; then
+            echo "Error: $target_jdk_home_varname not set"
+            exit 1
+          fi
+          echo "TARGET_JDK_HOME=$target_jdk_home" >> $GITHUB_ENV
+
+          # Export DEFAULT_TARGET_JDK!
+          readonly default_target_jdk=$(./mvnw help:evaluate -Dexpression=target.jdk -DforceStdout -q)
+          if [ -z "$default_target_jdk" ]; then
+            echo "Error: DEFAULT_TARGET_JDK not set (target.jdk property in POM undefined)"
+            exit 1
+          fi
+          echo "DEFAULT_TARGET_JDK=$default_target_jdk" >> $GITHUB_ENV
 
       - name: Build with Maven
-        env:
-          JAVA_VERSION: ${{ matrix.java }}
-          JDK_VERSION: ${{ steps.get-jdk-version.outputs.jdk_version }}
-        run: ./mvnw verify --batch-mode --errors -Djava.version=$JAVA_VERSION -Djdk.version=$JDK_VERSION
+        run: |
+          echo "BUILD_JDK: $BUILD_JDK" >&2
+          echo "DEFAULT_TARGET_JDK: $DEFAULT_TARGET_JDK" >&2
+          echo "TARGET_JDK: $TARGET_JDK" >&2
+          echo "TARGET_JDK_HOME: $TARGET_JDK_HOME" >&2
+
+          # If Target JDK is different from the predefined one, disable lint failure, so warnings
+          # are emitted without disrupting the build (conversely, if Target JDK corresponds to the
+          # predefined one, fail on lint warnings, as they should have already been fixed on
+          # development)!
+          if [ "$TARGET_JDK" != "$DEFAULT_TARGET_JDK" ]; then
+            lenient_lint_option=-Dlint.lenient
+          fi
+
+          ./mvnw verify \
+              -Dtarget.jdk=$TARGET_JDK \
+              -Dtarget.jdk.home="$TARGET_JDK_HOME" \
+              -Dbuild.jdk=$BUILD_JDK \
+              $lenient_lint_option \
+              --batch-mode --errors
 
   submit-dependency-snapshot:
     name: Submit Dependency Snapshot

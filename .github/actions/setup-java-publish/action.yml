@@ -1,0 +1,66 @@
+name: Set up Java for artifact publishing
+
+inputs:
+  distribution:
+    description: 'Java distribution'
+    required: true
+    default: 'temurin'
+  gpg_signing_key:
+    description: 'GPG signing key'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Resolve Tool JDK
+      id: tool-versions
+      uses: marocchino/tool-versions-action@4219f2e6bfdb4cce482b78f71ad9663e64f4d247 # v2.0.0
+
+    - name: Set up Tool JDK
+      uses: actions/setup-java@v5
+      with:
+        java-version: ${{ steps.tool-versions.outputs.java }}
+        distribution: ${{ inputs.distribution }}
+        server-id: central
+        server-username: MAVEN_USERNAME
+        server-password: MAVEN_PASSWORD
+        gpg-private-key: ${{ inputs.gpg_signing_key }}
+        gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+    - name: Resolve Target JDK
+      shell: bash
+      run: |
+        # Export TARGET_JDK!
+        readonly target_jdk=$(./mvnw help:evaluate -Dexpression=target.jdk -DforceStdout -q)
+        if [ -z "$target_jdk" ]; then
+          echo "Error: TARGET_JDK not set (target.jdk property in POM undefined)"
+          exit 1
+        fi
+        echo "TARGET_JDK=$target_jdk" >> $GITHUB_ENV
+
+    - name: Set up Target JDK
+      uses: actions/setup-java@v5
+      with:
+        java-version: ${{ env.TARGET_JDK }}
+        distribution: ${{ inputs.distribution }}
+        cache: maven
+
+    - name: Set up Java environment variables
+      env:
+        TOOL_JDK: ${{ steps.tool-versions.outputs.java }}
+      shell: bash
+      run: |
+        # Export TARGET_JDK_HOME!
+        readonly target_jdk_home=$JAVA_HOME
+        echo "TARGET_JDK_HOME=$target_jdk_home" >> $GITHUB_ENV
+
+        # Export default JDK (Tool JDK)!
+        readonly tool_major=$(echo "$TOOL_JDK" | cut -d'.' -f1)
+        readonly tool_jdk_home_varname="JAVA_HOME_${tool_major}_${{ runner.arch }}"
+        readonly tool_jdk_home="${!tool_jdk_home_varname}"
+        if [ -z "$tool_jdk_home" ]; then
+          echo "Error: $tool_jdk_home_varname not set"
+          exit 1
+        fi
+        echo "JAVA_HOME=$tool_jdk_home" >> $GITHUB_ENV
+        echo "PATH=$tool_jdk_home/bin:$PATH" >> $GITHUB_ENV
