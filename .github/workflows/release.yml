@@ -79,7 +79,7 @@ jobs:
           pip install "commitizen==${{ env.COMMITIZEN_VERSION }}"
 
       - name: Set up Java
-        uses: ./.github/actions/setup-java-publish
+        uses: pdfclown/.github/.github/actions/setup-java-publish
         with:
           gpg_signing_key: ${{ secrets.GPG_SIGNING_KEY }}
 
