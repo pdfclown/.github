@@ -102,7 +102,7 @@ jobs:
             # NOTE:
             # - no need to set `target.jdk` property, as project's default corresponds to Target JDK
             # - no need to set `build.jdk` property, as project's default corresponds to Tool JDK
-            ./mvnw deploy -Ppublish \
+            ./mvnw deploy -Ppublish,reuse \
                 -Dtarget.jdk.home="$TARGET_JDK_HOME" \
                 --batch-mode --errors
           else
