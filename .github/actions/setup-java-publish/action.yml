@@ -1,4 +1,15 @@
-name: Set up Java for artifact publishing
+#
+# Composite action which prepares the Java (Maven-based) toolchain, along with ancillary tools, for
+# publishing artifacts.
+#
+# Installations:
+# - Tool JDK (specified by `java` property in the project's `.tool-versions` file)
+# - Target JDK (specified by `target.jdk` property in the project's POM file)
+# - Python (specified by `python` property in the project's `.tool-versions` file)
+# - Python packages:
+#   - reuse (specified herein)
+#
+name: Set up the toolset for Java artifact publishing
 
 inputs:
   distribution:
@@ -12,9 +23,26 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Resolve Tool JDK
+    - name: Resolve tool versions
       id: tool-versions
       uses: marocchino/tool-versions-action@4219f2e6bfdb4cce482b78f71ad9663e64f4d247 # v2.0.0
+
+    - name: Resolve tool dependency versions
+      id: dep-versions
+      shell: bash
+      run: |
+        echo "reuse=6.2.0" >> "$GITHUB_OUTPUT"
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ steps.tool-versions.outputs.python }}
+
+    - name: Install Python dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install "reuse==${{ steps.dep-versions.outputs.reuse }}"
 
     - name: Set up Tool JDK
       uses: actions/setup-java@v5

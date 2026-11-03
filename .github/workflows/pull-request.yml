@@ -9,6 +9,10 @@ name: Pull Request
 on:
   workflow_call
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   main:
     name: Check Pull Request Title (semantic)

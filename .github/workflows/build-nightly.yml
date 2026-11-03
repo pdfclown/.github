@@ -24,6 +24,10 @@ on:
         default: false
         required: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   initialize:
     name: Prepare workflow
@@ -77,8 +81,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Java
-        uses: pdfclown/.github/.github/actions/setup-java-publish@main
+      - name: Set up the publishing toolset
+        uses: pdfclown/.github/.github/actions/setup-java-publish@v2
         with:
           gpg_signing_key: ${{ secrets.GPG_SIGNING_KEY }}
 

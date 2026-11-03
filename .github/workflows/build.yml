@@ -18,6 +18,10 @@ on:
         default: "[ '17', '21', '25' ]"
         required: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     name: Java ${{ matrix.java }} build
