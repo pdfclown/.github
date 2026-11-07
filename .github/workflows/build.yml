@@ -68,7 +68,7 @@ jobs:
         uses: marocchino/tool-versions-action@4219f2e6bfdb4cce482b78f71ad9663e64f4d247 # v2.0.0
 
       - name: Set up Target JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           java-version: ${{ matrix.java }}
           distribution: ${{ env.JAVA_DISTRO }}
@@ -77,7 +77,7 @@ jobs:
       - name: Set up Tool JDK
         # IMPORTANT: Tool JDK MUST be the last to set up in order to make it the default one and run
         #            Maven.
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           java-version: ${{ steps.tool-versions.outputs.java }}
           distribution: ${{ env.JAVA_DISTRO }}
