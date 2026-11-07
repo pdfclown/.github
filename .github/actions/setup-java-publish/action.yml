@@ -34,7 +34,7 @@ runs:
         echo "reuse=6.2.0" >> "$GITHUB_OUTPUT"
 
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ steps.tool-versions.outputs.python }}
 
