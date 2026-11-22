@@ -16,7 +16,7 @@ defaults:
 jobs:
   main:
     name: Check Pull Request Title (semantic)
-    # See `docs/common/maintenance.md#pull-requests`.
+    # See <https://github.com/pdfclown/pdfclown-common/blob/main/docs/common/scm.md#pull-requests>.
     runs-on: ubuntu-latest
     steps:
       - uses: amannn/action-semantic-pull-request@v6
@@ -24,7 +24,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           # Semantic PR type MUST correspond to a commit type defined in
-          # `docs/common/maintenance.md#commit-types`.
+          # <https://github.com/pdfclown/pdfclown-common/blob/main/docs/common/scm.md#commit-types>.
           types: |
             build
             bump
@@ -39,7 +39,7 @@ jobs:
             style
             test
           # Semantic PR scope MUST correspond to a commit scope defined in
-          # `docs/common/maintenance.md#commit-scopes`.
+          # <https://github.com/pdfclown/pdfclown-common/blob/main/docs/common/scm.md#commit-scopes>.
           scopes: |
             base
             build
